@@ -49,14 +49,14 @@ def nearest_neighbour_distribution_2D_impenetrable(r, sigma, rho):
     # NB --> assert r > sigma will fail when using curve_fit, so use > 0 as a compromise
     # assert r > 0, 'Distribution is valid for r>sigma.'
     # disk volume (area in 2D)
-    v2 = _np.pi * (sigma/2)**2
+    vol = _np.pi * (sigma/2.)**2
     # reduced density
-    eta = rho * v2
+    eta = rho * vol
 
     # scaled distance
     x = r / sigma
 
-    return 4*eta*(2*x-eta) * _np.exp((-4*eta*(x**2-1+eta*(x-1))/(1-eta)**2)) / (sigma*(1-eta)**2)
+    return _np.exp(-4*eta*(x**2-1+eta*(x-1))/(1-eta)**2) * 4*eta*(2*x-eta) / (sigma*(1-eta)**2)
 
 def nearest_neighbour_distribution_2D_points(r, rho):
     '''

@@ -9,8 +9,7 @@ Created on Sat Nov 18 22:49:29 2017
 import numpy as _np
 from scipy.spatial import cKDTree as _cKDTree
 
-    
-def create_edge_image(image, delta=(-1, 1)):
+def create_edge_image(mask, delta=(-1, 1)):
     '''
     Creates an image of egdes from a binary or greyscale image eg. numbered,
     skimage.measure.label, or Gwyddion number_grains() image. Background must
@@ -36,17 +35,17 @@ def create_edge_image(image, delta=(-1, 1)):
         
     '''
     # create empty array to hold found edges
-    edges = _np.zeros_like(image) 
+    edges = _np.zeros_like(mask) 
     
-    for axis in _np.arange(image.ndim): # works for 2d and 3d
+    for axis in _np.arange(mask.ndim): # works for 2d and 3d
         for shift in delta:
             # roll the image along one direction by shift in delta
-            shifted_image = _np.roll(image, shift, axis=axis)
+            shifted_image = _np.roll(mask, shift, axis=axis)
             # the edges of the grains are found where the data is non-zero
             # in the original image and zero after rolling by ± 1
-            mask = _np.where((image!=0) & (shifted_image==0))
+            coords = _np.nonzero(_np.logical_and(mask, shifted_image!=mask))
             # this preserves the original grain numbering system
-            edges[mask] = image[mask]
+            edges[coords] = mask[coords]
     
     return edges
 
