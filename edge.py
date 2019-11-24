@@ -9,8 +9,9 @@ Created on Sat Nov 18 22:49:29 2017
 import numpy as _np
 from scipy.spatial import cKDTree as _cKDTree
 
+
 def create_edge_image(mask, delta=(-1, 1)):
-    '''
+    """
     Creates an image of egdes from a binary or greyscale image eg. numbered,
     skimage.measure.label, or Gwyddion number_grains() image. Background must
     be denoted with zeroes.
@@ -33,24 +34,25 @@ def create_edge_image(mask, delta=(-1, 1)):
         The found edges, maintains the original labelling. 
         Same shape as input array.
         
-    '''
+    """
     # create empty array to hold found edges
-    edges = _np.zeros_like(mask) 
-    
-    for axis in _np.arange(mask.ndim): # works for 2d and 3d
+    edges = _np.zeros_like(mask)
+
+    for axis in _np.arange(mask.ndim):  # works for 2d and 3d
         for shift in delta:
             # roll the image along one direction by shift in delta
             shifted_image = _np.roll(mask, shift, axis=axis)
             # the edges of the grains are found where the data is non-zero
             # in the original image and zero after rolling by ± 1
-            coords = _np.nonzero(_np.logical_and(mask, shifted_image!=mask))
+            coords = _np.nonzero(_np.logical_and(mask, shifted_image != mask))
             # this preserves the original grain numbering system
             edges[coords] = mask[coords]
-    
+
     return edges
 
+
 def nearest_neighbour_from_edge_image(edge_image, n_jobs=-1):
-    '''
+    """
     From an edge_image, ie. a pixelated image where the ROI are numbered,
     (best obtained using create_edge_image), the 1st nearest neigbour distance of
     neighbouring particles is calculated.
@@ -76,7 +78,7 @@ def nearest_neighbour_from_edge_image(edge_image, n_jobs=-1):
         Coordinates of the closest pixel responsible for the NN value in a
         neighbouring grain.
         
-    '''
+    """
 
     edge_data = _np.stack(_np.nonzero(edge_image), axis=1)
     # make tree
@@ -86,28 +88,31 @@ def nearest_neighbour_from_edge_image(edge_image, n_jobs=-1):
     # delete background grain, defined as 0
     labels = _np.delete(labels, 0)
 
-
     # holder arrays for final result, to be returned
     final_nnd = _np.empty(labels.size)
     final_locations_neighbour = _np.empty((labels.size, edge_image.ndim))
     final_locations_queried = _np.empty((labels.size, edge_image.ndim))
-    
+
     # loop over each grain value to query
     for n_index, n in enumerate(labels):
         # original location of grain on edge_image, labelled by n
-        queried_grain_mask = (edge_image == n)
+        queried_grain_mask = edge_image == n
 
         # query tree where value is n for k cloest points
         queried_points = _np.stack(_np.nonzero(queried_grain_mask), axis=1)
         # must query one more point than in edge mask, otherwise no other particles would be found
-        knn = len(queried_points)+1
+        knn = len(queried_points) + 1
         nnd, index_nnd = tree.query(queried_points, k=knn)
-        
+
         # get the image coordinates of from the returned index of the query
         coords = tree.data[_np.concatenate(index_nnd)].astype(int)
-        
+
         # get the index of the valid results (!=n) in image coords
-        valid_indices, = _np.where(_np.concatenate(edge_image[tuple(_np.split(coords.T, edge_image.ndim, axis=0))] != n))
+        valid_indices, = _np.where(
+            _np.concatenate(
+                edge_image[tuple(_np.split(coords.T, edge_image.ndim, axis=0))] != n
+            )
+        )
         # get nnd of valid results
         nnd_c = _np.concatenate(nnd)
         closest_index = _np.argmin(nnd_c[valid_indices])
@@ -116,12 +121,11 @@ def nearest_neighbour_from_edge_image(edge_image, n_jobs=-1):
         final_locations_neighbour[n_index] = coords[valid_indices][closest_index]
         # get final value for closest point in queried edge using index math (floor div)
         queried_index = valid_indices[closest_index]
-        final_locations_queried[n_index] = queried_points[queried_index//knn]
+        final_locations_queried[n_index] = queried_points[queried_index // knn]
 
     return final_nnd, final_locations_queried, final_locations_neighbour
 
     ##### ----- OLD CODE BELOW, 3x as slow, keep here for legacy puposes for now, March 2019
-
 
     #     if labels is None:
     #         labels = _np.arange(edge_image.max()) + 1
@@ -131,39 +135,39 @@ def nearest_neighbour_from_edge_image(edge_image, n_jobs=-1):
     #     edge_data = _np.stack(_np.where(edge_image!=0), axis=1)
     #     # make tree
     #     tree = _cKDTree(edge_data)
-        
+
     #     _sz = len(labels)
     #     final_nnd = _np.empty(_sz)
     #     final_queried_grain_location = _np.empty((_sz, edge_image.ndim))
     #     final_result_location = _np.empty((_sz, edge_image.ndim))
-    
+
     # # loop over each grain value to query
     # for n_index, n in enumerate(labels):
     #     # original location of grain on edge_image, labelled by n
     #     original_grain_mask = (edge_image == n)
-    
+
     #     # query tree where value is n for k cloest points
     #     queried_points = _np.stack(_np.where(original_grain_mask), axis=1)
     #     # must query one more point than in edge mask, otherwise no other particles would be found
     #     nnd, tree_index = tree.query(queried_points, k=len(queried_points)+1, n_jobs=n_jobs)
-    
+
     #     # concatenate points into one big array
-    #     #pixels = _np.concatenate(tree.data[tree_index].astype(int), axis=0) 
+    #     #pixels = _np.concatenate(tree.data[tree_index].astype(int), axis=0)
     #     # tree.data is float by default
-         
+
     #     # plot all found points
     #     # split into columns to allow fancy indexing
     #     #_result[_np.split(pixels, pixels.ndim, axis=1)] = 2*n
     #     # reshow original grain, the values produce contrast
     #     #_result[original_grain_mask] = n
-    
+
     #     # array length needed to find cloest => 1 for each data point in grain edge queried
     #     _x, _y = _np.nonzero(original_grain_mask)
     #     _size = len(_x)
     #     _nnd = _np.empty(_size)
     #     _queried_location = _np.empty((_size, edge_image.ndim))
     #     _result_location = _np.empty((_size, edge_image.ndim))
-    
+
     #     # loop over nnd for each point
     #     for i, _n in enumerate(nnd):
     #         # each loop is for one queried point in the grain -> returns k found nn
@@ -172,38 +176,39 @@ def nearest_neighbour_from_edge_image(edge_image, n_jobs=-1):
     #         # becuase the grain points are queried,
     #         # each loop over nnd corresponds to data in the query
     #         self_data = queried_points[i]
-        
+
     #         ### use these lines below when assuming that queried point is in return values
     #         ### that is to say the nnd of this point will be zero.
     #         #self_index = _indices[_n.argmin()]
     #         #self_data = tree.data[self_index].astype(int) # should be indices
-    
+
     #         # for each queried point, get the locations of found neighbours
     #         neighbour_locations = tree.data[_indices].astype(int)
     #         # get value from original data (not part of queried grain (!=n))
     #         valid_points = edge_image[tuple(_np.split(neighbour_locations,
-    #                                          neighbour_locations.ndim, 
+    #                                          neighbour_locations.ndim,
     #                                          axis=1))] != n
     #         # get index of closest point that isn't self grain
     #         closest = _n[valid_points.flatten()].argmin()
     #         final_tree_index = _indices[valid_points.flatten()][closest]
     #         closest_location = tree.data[final_tree_index].astype(int)
-        
+
     #         _nnd[_i] = _n[valid_points.flatten()].min()
     #         _queried_location[_i] = self_data
     #         _result_location[_i] = closest_location
-    
+
     #     _min = _nnd.argmin()
-        
+
     #     final_nnd[n_index] = _nnd[_min]
     #     final_queried_grain_location[n_index] = _queried_location[_min]
     #     final_result_location[n_index] = _result_location[_min]
-    
+
     # # returns nnd, location of pt on grain responsible for query, and location odf closest result for that pt
     # return final_nnd, final_queried_grain_location, final_result_location
-            
+
+
 def plot_edge_neighbours(queried_locations, result_locations, ax, image=None, **kwargs):
-    '''
+    """
     Plots the found nearest neighbours on the corresponding image.
     
     Parameters
@@ -218,14 +223,15 @@ def plot_edge_neighbours(queried_locations, result_locations, ax, image=None, **
         Image to plot. Actual data or edge_image recommended. Default is None,
         in this case image is not plotted on axes.
             
-    '''
+    """
     # sort out kwargs for plot
     if len(kwargs) == 0:
-        kwargs = dict(color='w', marker=None, lw=1)
+        kwargs = dict(color="w", marker=None, lw=1)
 
     if image is not None:
         ax.matshow(image)
 
     for i, (_qrow, _qcol) in enumerate(queried_locations):
         _rrow, _rcol = result_locations[i]
-        ax.plot((_qcol,_rcol), (_qrow,_rrow), **kwargs)
+        ax.plot((_qcol, _rcol), (_qrow, _rrow), **kwargs)
+
