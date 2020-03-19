@@ -60,7 +60,11 @@ def nearest_neighbour_distribution_2D_impenetrable(r, sigma, rho, clip=True):
 
     # enforce that model should be 0 for all r < sigma
     if clip:
-        D[r < sigma] = 0
+        if not r.ndim:
+            if r < sigma:
+                D = 0
+        else:
+            D[r < sigma] = 0
 
     return D
 
