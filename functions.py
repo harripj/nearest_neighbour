@@ -40,7 +40,8 @@ def nearest_neighbour_distribution_2D_impenetrable(r, sigma, rho, clip=True):
     [1] S Torquato et al 1990 J. Phys. A: Math. Gen. 23 L103. DOI: 10.1088/0305-4470/23/3/005
 
     """
-
+    # format input
+    r = _np.asarray(r)
     # disk volume (area in 2D)
     vol = _np.pi * (sigma / 2.0) ** 2
     # reduced density
