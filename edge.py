@@ -6,19 +6,26 @@ Created on Sat Nov 18 22:49:29 2017
 @author: pjh523
 """
 
-import numpy as _np
-from scipy.spatial import cKDTree as _cKDTree
+from typing import Tuple, Union
+import numpy as np
+from scipy.spatial import cKDTree
 
 
-def create_edge_image(mask, delta=(-1, 1), nonzero=False):
+def create_edge_image(
+    mask: np.ndarray,
+    delta=(-1, 1),
+    nonzero: bool = False,
+    return_values: bool = False,
+):
     """
-    Creates an image of egdes from a binary or greyscale image eg. numbered,
-    skimage.measure.label, or Gwyddion number_grains() image. Background must
-    be denoted with zeroes.
-    
-    The original image is rolled by delta typically ±1 to find the edges in all
-    of the images dimensions. The labelling of the original image is preserved.
-    
+    Creates an image of egdes from a binary or greyscale image eg.
+    numbered, skimage.measure.label, or Gwyddion number_grains() image.
+    Background must be denoted with zeroes.
+
+    The original image is rolled by delta typically ±1 to find the edges
+    in all of the images dimensions. The labelling of the original image
+    is preserved.
+
     Parameters
     ----------
     image: numpy.ndarray
@@ -27,61 +34,86 @@ def create_edge_image(mask, delta=(-1, 1), nonzero=False):
     delta: tuple of ints
         The shift over which to find the edges, typically ±1.
         Default is (-1,1).
-        
+    return_values
+
     Returns
     -------
     edges: array
-        The found edges, maintains the original labelling. 
+        The found edges, maintains the original labelling.
         Same shape as input array.
-        
+    values
+        Returned if `return_values` is `True`.
+
     """
     # create empty array to hold found edges
-    edges = _np.zeros_like(mask)
+    edges = np.zeros_like(mask)
 
-    for axis in _np.arange(mask.ndim):  # works for 2d and 3d
+    if return_values:
+        values = np.empty(edges.shape + (2,), dtype=edges.dtype)
+
+    for axis in np.arange(mask.ndim):  # works for 2d and 3d
         for shift in delta:
             # roll the image along one direction by shift in delta
-            shifted_image = _np.roll(mask, shift, axis=axis)
+            shifted_image = np.roll(mask, shift, axis=axis)
             # the edges of the grains are found where the data is non-zero
             # in the original image and zero after rolling by ± 1
             changed = shifted_image != mask
             if nonzero:
-                changed = _np.logical_and(changed, shifted_image > 0)
-            # this preserves the original grain numbering system
-            edges[changed] = mask[changed]
+                changed = np.logical_and(changed, shifted_image > 0)
+            # this preserves the original numbering system
+            m = mask[changed]
+            edges[changed] = m
+            if return_values:
+                vals = np.column_stack((m, shifted_image[changed]))
+                if nonzero:
+                    vals_nonzero = (vals > 0).all(axis=-1)
+                    idx = np.column_stack(np.nonzero(changed))
+                    values[tuple(idx[vals_nonzero].T)] = vals[vals_nonzero]
+                else:
+                    values[changed] = vals
 
-    return edges
+    if return_values:
+        return edges, values
+    else:
+        return edges
 
 
 def nearest_neighbour_edges(mask, k=1, n_jobs=-1, is_edges=False):
     """
 
-    Calculate the k nearest neighbours from the edges of features using a labelled image.
-    
+    Calculate the k nearest neighbours from the edges of features using
+    a labelled image.
+
+    NB. returned arrays are consistent with the labelling in edges, ie.
+    in order of labelling. N is the number of grains, ie. edges.max().
+
     Parameters
     ----------
-    
+
     mask: (M, N [,P])np.ndarray
         The labelled image.
     k: int
         Number of nearest edge locations to return.
     n_jobs: int
-        Straight pass through to scipy.spatial.cKDTree.query. Default is -1.
+        Passed to scipy.spatial.cKDTree.query.Default is -1.
     is_edges: bool
         If True then it is assumed that mask is an image of edges.
         If False then it is assumed that the features in mask are filled.
-        
+
     Returns
     -------
-    
-    NB. returned arrays are consistent with the labelling in edges, ie. in order of labelling. N is the number of grains, ie. edges.max().
-    nnd: (N, k) np.ndarray, 
-        The nearest neighbour distance for each queried value in edge_image.
-    queried: (N, k, edges.ndim) np.ndarray 
-        Coordinates of the point within each grain responsible for the NN distance.
+
+
+    nnd: (N, k) np.ndarray,
+        The nearest neighbour distance for each queried value in
+        edge_image.
+    queried: (N, k, edges.ndim) np.ndarray
+        Coordinates of the point within each grain responsible for the
+        NN distance.
     results: (N, k, edges.ndim) np.ndarray
-        Coordinates of the closest neighbouring point from a different grain.
-        
+        Coordinates of the closest neighbouring point from a different
+        grain.
+
     """
     # sort out input
     if is_edges:
@@ -89,49 +121,49 @@ def nearest_neighbour_edges(mask, k=1, n_jobs=-1, is_edges=False):
     else:
         edges = create_edge_image(mask)
 
-    nz = _np.nonzero(edges)
-    coords = _np.stack(nz, axis=1)
+    nz = np.nonzero(edges)
+    coords = np.stack(nz, axis=1)
     labels = edges[nz]  # retain original labelling
 
     # make tree
-    tree = _cKDTree(coords)
+    tree = cKDTree(coords)
 
     # total number of pixels for every label
-    counts = _np.bincount(edges.ravel())
+    counts = np.bincount(edges.ravel())
     # ignore label 0 -> background
     # to get a result for every point, need to query counts.max()+k
     dists, index = tree.query(coords, k=counts[1:].max() + k)
 
     # want first result with different labelling
-    result = labels[index] != labels[:, _np.newaxis]
-    closest = _np.argmax(result, axis=1)
+    result = labels[index] != labels[:, np.newaxis]
+    closest = np.argmax(result, axis=1)
 
     dout = []
     iout = []
     qout = []
 
-    for l in _np.unique(labels):
+    for l in np.unique(labels):
         # only get indices of one mask value
-        mask = _np.equal(labels, l)
+        mask = np.equal(labels, l)
 
         # get the closest k distances from the selected points
         d = dists[mask, [closest[mask] + i for i in range(k)]]
         # sort by closest distance
-        idx = _np.unravel_index(_np.argsort(d, axis=None)[:k], d.shape)
+        idx = np.unravel_index(np.argsort(d, axis=None)[:k], d.shape)
 
         dout.append(d[idx])
         iout.append(index[mask, [closest[mask] + i for i in range(k)]][idx])
         # nonzero(mask)[0] -> only care about label index
         # [idx[1]] -> and want which queried point it came from
-        qout.append(_np.nonzero(mask)[0][idx[1]])
+        qout.append(np.nonzero(mask)[0][idx[1]])
 
-    return _np.stack(dout), coords[_np.stack(qout)], coords[_np.stack(iout)]
+    return np.stack(dout), coords[np.stack(qout)], coords[np.stack(iout)]
 
 
 def plot_edge_neighbours(loc1, loc2, ax, **kwargs):
     """
     Plots the found nearest neighbours on the corresponding image.
-    
+
     Parameters
     ----------
     queried_locations: array
@@ -140,7 +172,7 @@ def plot_edge_neighbours(loc1, loc2, ax, **kwargs):
         Coordinates, best obtained from nearest_neighbour_from_edge_image.
     ax: plt.axes
         axes to plot on.
-            
+
     """
     # sort out kwargs for plot
     kwargs.setdefault("color", "w")
